@@ -1,0 +1,10 @@
+# Java build output
+*.class
+
+# Local logs and runtime data
+*.log
+mongo-data/
+
+# Editor metadata
+.idea/
+.vscode/
