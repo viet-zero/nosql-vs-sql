@@ -1,14 +1,13 @@
 <div align="center">
 
 # 🧭 NoSQL vs SQL
-### Database Visual Lab
+### Database Visual Lab · Java Swing
 
-**Một phòng lab Java Swing để xem cùng dữ liệu được tổ chức và truy vấn theo hai cách.**
+**Một ứng dụng học tập nhỏ để quan sát cùng dữ liệu theo mô hình quan hệ và mô hình document.**
 
 ![Java 17](https://img.shields.io/badge/Java-17%2B-orange?logo=openjdk&logoColor=white)
 ![Swing](https://img.shields.io/badge/UI-Java%20Swing-437291)
-![SQL Server](https://img.shields.io/badge/Database-SQL%20Server-CC2927?logo=microsoftsqlserver&logoColor=white)
-![MongoDB](https://img.shields.io/badge/Database-MongoDB-47A248?logo=mongodb&logoColor=white)
+![Simulation](https://img.shields.io/badge/Mode-in--memory%20simulation-6E56CF)
 ![Single file](https://img.shields.io/badge/Source-single%20Java%20file-6E56CF)
 
 </div>
@@ -17,108 +16,105 @@
 
 ## 📚 Mục lục
 
-- [Phòng lab này làm gì?](#-phòng-lab-này-làm-gì)
-- [So sánh nhanh](#-so-sánh-nhanh)
-- [Yêu cầu trước khi chạy](#-yêu-cầu-trước-khi-chạy)
-- [Chạy ứng dụng](#-chạy-ứng-dụng)
+- [Ứng dụng làm gì?](#-ứng-dụng-làm-gì)
+- [So sánh hai mô hình](#-so-sánh-hai-mô-hình)
+- [Yêu cầu và cách chạy](#-yêu-cầu-và-cách-chạy)
 - [Kịch bản trình bày](#-kịch-bản-trình-bày)
-- [Cấu trúc dữ liệu](#-cấu-trúc-dữ-liệu)
+- [Dữ liệu mẫu](#-dữ-liệu-mẫu)
 - [Giới hạn](#-giới-hạn)
+- [Cấu trúc repository](#-cấu-trúc-repository)
 
-## 🔬 Phòng lab này làm gì?
+## 🔬 Ứng dụng làm gì?
 
-Ứng dụng dùng **SQL Server và MongoDB thật** để bạn thao tác rồi quan sát hai cách lưu cùng một dữ liệu sinh viên và điểm:
+Ứng dụng mô phỏng bằng Java hai cách tổ chức cùng dữ liệu sinh viên và điểm:
 
-- CRUD: thêm, sửa, xóa và truy vấn sinh viên.
-- Hiển thị bảng quan hệ bên SQL Server và document JSON bên MongoDB cạnh nhau.
-- Xem câu lệnh SQL Server và MongoDB tương ứng với thao tác.
-- So sánh `JOIN` với dữ liệu nhúng trong document.
-- Thêm field riêng vào một document để minh họa schema linh hoạt.
+- **SQL Server:** hai bảng quan hệ `Students` và `Scores`; phần hiển thị JOIN chúng thành các hàng.
+- **MongoDB:** collection `students`; điểm được nhúng trong mảng `scores` của mỗi document.
+- Cùng thao tác **INSERT, UPDATE, DELETE, QUERY** trên cả hai mô hình.
+- So sánh `SELECT ... JOIN` với `find()` và câu lệnh tương ứng ngay trong giao diện.
 - So sánh SQL `GROUP BY` với MongoDB aggregation pipeline.
-- Tab toán tử tham khảo: `$eq`, `$in`, `$and`, `$set`, `$push`, `deleteOne()` và các toán tử liên quan.
+- Có tab **Viết SQL → NoSQL** để nhập `SELECT` đơn giản, xem `find()` tương ứng và lọc kết quả mô phỏng.
+- Thêm một field riêng vào document để minh họa schema linh hoạt.
+- Tab tham khảo các toán tử MongoDB như `$eq`, `$in`, `$and`, `$set`, `$push` và cách đối chiếu SQL.
 
-> Tab toán tử là tài liệu tham khảo; không phải tất cả toán tử trong danh sách đều có nút thao tác trong ứng dụng.
+> **Chế độ mô phỏng:** dữ liệu nằm trong bộ nhớ của chương trình. Không cần SQL Server, MongoDB, tài khoản Windows, dịch vụ nền hay kết nối mạng. Câu lệnh trong giao diện để học và so sánh; ứng dụng không gửi lệnh tới database thật. Dữ liệu trở về mẫu khi đóng chương trình.
 
-## ⚖️ So sánh nhanh
+## ⚖️ So sánh hai mô hình
 
-| Nội dung | SQL Server | MongoDB |
+| Khái niệm | Mô hình SQL Server | Mô hình MongoDB |
 |---|---|---|
-| Mô hình | Bảng, hàng và cột có kiểu dữ liệu | Collection chứa document BSON |
-| Điểm của sinh viên | Bảng `Scores` liên kết bằng `StudentId` | Mảng `scores` nhúng trong document |
-| Kết hợp dữ liệu | `JOIN` | Đọc document đã nhúng; có thể dùng aggregation |
-| Thay đổi cấu trúc | Thường dùng DDL như `ALTER TABLE` | Có thể thêm field vào từng document |
-| Tổng hợp | `GROUP BY` | Aggregation pipeline |
+| Cấu trúc | Bảng, hàng, cột | Collection chứa document |
+| Quan hệ điểm | Bảng `Scores` dùng `StudentId` | Mảng `scores` nhúng trong document |
+| Đọc dữ liệu | `SELECT`, `JOIN`, `WHERE` | `find()` với điều kiện trên document |
+| Tổng hợp | `GROUP BY`, `AVG`, `COUNT` | `$unwind`, `$group`, `$sort` |
+| Field riêng | Thường cần đổi schema bảng | Có thể thêm vào từng document |
 
-## 🧰 Yêu cầu trước khi chạy
+## 🧰 Yêu cầu và cách chạy
 
-- Windows 10/11.
+- Windows, macOS hoặc Linux có giao diện đồ họa.
 - JDK 17 trở lên.
-- SQL Server Express đang chạy; mặc định instance là `localhost\SQLEXPRESS`.
-- MongoDB Server đang chạy; mặc định `localhost:27017`.
-- Tài khoản Windows hiện tại phải có quyền kết nối SQL Server, tạo database/bảng và ghi dữ liệu.
-- MongoDB trong cấu hình demo cần cho phép kết nối local không xác thực.
+- Không cần cài database, Maven, JDBC driver hay thư viện ngoài.
 
-**Không cần Maven, JDBC driver hoặc thư viện MongoDB cài thêm.** SQL Server được gọi qua Windows PowerShell/.NET SqlClient. Client MongoDB tối giản dùng OP_MSG/BSON được viết ngay trong file Java.
-
-## ▶️ Chạy ứng dụng
-
-Mở PowerShell tại thư mục chứa `NoSqlVsSqlDemo.java`:
+Mở Terminal/PowerShell tại thư mục chứa `NoSqlVsSqlDemo.java` và chạy:
 
 ```powershell
 javac -encoding UTF-8 NoSqlVsSqlDemo.java
 java NoSqlVsSqlDemo
 ```
 
-Khi mở, ứng dụng thử kết nối tới SQL Server và MongoDB theo địa chỉ mặc định. Có thể đổi instance SQL, host/port MongoDB và tên database MongoDB trên giao diện.
-
-Lần kết nối đầu tiên, ứng dụng tạo database `NoSqlComparison` và hai bảng `Students`, `Scores` nếu chưa có và tài khoản SQL có đủ quyền.
-
 ## 🎓 Kịch bản trình bày
 
-1. Nhấn **KẾT NỐI & CHUẨN BỊ**.
-2. Chọn ID và dùng **INSERT**, **UPDATE** hoặc **DELETE**; quan sát hai cách tổ chức dữ liệu.
-3. Dùng **QUERY** để xem SQL `JOIN` và truy vấn document MongoDB.
-4. Dùng **GROUP BY / AGGREGATE** để đối chiếu cách tính điểm trung bình theo môn.
-5. Thêm field như `hobby` vào document. Lệnh `ALTER TABLE` bên SQL chỉ hiện để minh họa, không được chạy.
-6. Mở các tab **Câu lệnh đang dùng**, **Giải thích khác biệt** và **Toán tử MongoDB ↔ SQL**.
+1. Quan sát dữ liệu mẫu: SQL hiện nhiều hàng JOIN từ hai bảng; MongoDB hiện mỗi sinh viên dưới dạng document JSON.
+2. Dùng **INSERT** với ID mới để thêm sinh viên ở cả hai mô hình mô phỏng.
+3. Chọn ID có sẵn, sửa tên hoặc điểm rồi nhấn **UPDATE**.
+4. Nhấn **DELETE** để xem cả các hàng điểm và document tương ứng biến mất.
+5. Nhập tên ở ô **Tìm tên** rồi nhấn **QUERY**; xem `LIKE` và regex `find()`.
+6. Nhấn **GROUP BY / AGGREGATE** để đối chiếu kết quả trung bình điểm theo môn.
+7. Chọn ID sinh viên, nhập field như `hobby`, rồi nhấn **THÊM FIELD NoSQL**. Document thay đổi; cấu trúc bảng SQL vẫn giữ nguyên.
+8. Mở các tab câu lệnh, giải thích khác biệt và bảng toán tử.
+9. Mở **Viết SQL → NoSQL**, sửa câu `SELECT ... FROM Students ... WHERE ...`, rồi bấm **DỊCH SQL → MONGODB & LỌC**. Bộ dịch minh họa `StudentId`, `Name`, `Subject`, `Score` với toán tử so sánh, `LIKE` và điều kiện `AND`.
 
-## 🗂️ Cấu trúc dữ liệu
+## 🗃️ Dữ liệu mẫu
 
-### SQL Server · mô hình quan hệ
+### SQL · hai bảng riêng
 
-Hai bảng riêng được nối qua `StudentId`:
-
-```sql
-SELECT s.StudentId, s.Name, c.Subject, c.Score
-FROM dbo.Students AS s
-LEFT JOIN dbo.Scores AS c ON c.StudentId = s.StudentId;
+```text
+Students                 Scores
++-----------+------+     +------------+---------+-------+
+| StudentId | Name |     | StudentId  | Subject | Score |
++-----------+------+     +------------+---------+-------+
+| 1         | Lan  |     | 1          | DBMS    | 9     |
+| 2         | Minh |     | 1          | Java    | 8.5   |
+|           |      |     | 2          | DBMS    | 8     |
++-----------+------+     +------------+---------+-------+
 ```
 
-### MongoDB · mô hình document
-
-Collection `students` lưu một document cho mỗi sinh viên; điểm được nhúng trong mảng `scores`:
+### MongoDB · document nhúng điểm
 
 ```javascript
 {
   _id: 1,
   name: "Lan",
-  scores: [{ subject: "DBMS", score: 9 }]
+  scores: [
+    { subject: "DBMS", score: 9 },
+    { subject: "Java", score: 8.5 }
+  ]
 }
 ```
 
 ## ⚠️ Giới hạn
 
-- Đây là demo học tập về mô hình dữ liệu và lệnh cơ bản, không phải ứng dụng production hay benchmark.
-- Hai database không dùng chung distributed transaction. Nếu một phía ghi thành công rồi phía kia lỗi, cần đối chiếu dữ liệu.
-- Client MongoDB trong file chỉ hỗ trợ phần wire protocol/BSON cần cho demo; không hỗ trợ xác thực MongoDB hoặc toàn bộ tính năng MongoDB. Hãy dùng cấu hình MongoDB local không bật auth.
-- Demo không triển khai replication, sharding, phân quyền người dùng hoặc đo hiệu năng.
-- Database và dữ liệu được lưu trên các dịch vụ chạy ở máy người dùng; repository không chứa dữ liệu database.
+- Đây là mô phỏng phục vụ học tập, không phải kết nối SQL Server/MongoDB thật.
+- Dữ liệu chỉ tồn tại trong RAM và mất khi đóng ứng dụng; nút **NẠP LẠI DỮ LIỆU MẪU** khôi phục bộ dữ liệu ban đầu.
+- Kết quả minh họa cấu trúc và cú pháp, không dùng để đo hiệu năng hoặc thay thế database.
+- Bộ dịch SQL sang MongoDB chỉ hiểu một tập con rõ ràng: `SELECT ... FROM Students`, tùy chọn JOIN với `Scores`, và điều kiện `WHERE` hỗ trợ trong giao diện. Truy vấn SQL tổng quát, hàm phức tạp, `OR`, subquery và các cú pháp khác chưa được chuyển đổi.
+- Chương trình không mô phỏng đầy đủ giao dịch, chỉ mục, phân quyền, replication hay sharding.
 
-## 📦 File trong repository
+## 📦 Cấu trúc repository
 
 ```text
 NoSQL_vs_SQL_JavaSwing_Demo/
-├── NoSqlVsSqlDemo.java   # Toàn bộ ứng dụng Swing và logic kết nối
-├── README.md             # Hướng dẫn và nội dung trình bày
+├── NoSqlVsSqlDemo.java   # Toàn bộ giao diện Swing và logic mô phỏng
+├── README.md             # Hướng dẫn chạy và nội dung trình bày
 └── .gitignore
 ```

@@ -2,94 +2,545 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.io.*;
-import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import java.util.regex.*;
 
-/** One-file Windows lab: SQL uses built-in Windows .NET SqlClient; MongoDB uses local OP_MSG. */
+/** One-file, in-memory teaching simulator for relational SQL and document NoSQL models. */
 public class NoSqlVsSqlDemo extends JFrame {
-    JTextField sqlInstance=new JTextField("localhost\\SQLEXPRESS",16),host=new JTextField("localhost",10),port=new JTextField("27017",5),database=new JTextField("nosql_lab",9);
-    JTextField id=new JTextField("1",5),name=new JTextField("Lan",9),subject=new JTextField("DBMS",9),score=new JTextField("9",4),query=new JTextField(10),fieldName=new JTextField("hobby",8),fieldValue=new JTextField("Đọc sách",10);
-    DefaultTableModel sqlModel=model("Student ID","Name","Subject","Score"),mongoModel=model("_id","Document JSON");boolean sqlReady,mongoReady;
-    static DefaultTableModel model(String... h){return new DefaultTableModel(h,0){public boolean isCellEditable(int r,int c){return false;}};}
-    JTextArea log=new JTextArea(4,80),sqlCommand=new JTextArea(4,42),mongoCommand=new JTextArea(4,42),comparison=new JTextArea();
-    NoSqlVsSqlDemo(){super("NoSQL vs SQL — Database Visual Lab");setDefaultCloseOperation(EXIT_ON_CLOSE);setSize(1320,850);setLocationRelativeTo(null);
-        JPanel root=new JPanel(new BorderLayout(8,8));root.setBorder(new EmptyBorder(12,12,12,12));root.setBackground(new Color(245,248,252));setContentPane(root);
-        JLabel title=new JLabel("NoSQL vs SQL — Database Visual Lab",JLabel.CENTER);title.setFont(new Font("SansSerif",1,23));root.add(title,BorderLayout.NORTH);
-        JPanel main=new JPanel(new BorderLayout(8,8));main.setOpaque(false);root.add(main);JPanel config=new JPanel(new GridBagLayout());config.setBorder(BorderFactory.createTitledBorder("Kết nối database thật"));
-        row(config,0,"SQL Server instance (Windows login)",sqlInstance);row(config,1,"MongoDB host / port / database",pair(host,port,database));
-        JButton connect=button("KẾT NỐI & CHUẨN BỊ",this::connect);GridBagConstraints g=new GridBagConstraints();g.gridx=1;g.gridy=3;g.insets=new Insets(4,5,4,5);config.add(connect,g);main.add(config,BorderLayout.NORTH);
-        JPanel middle=new JPanel(new BorderLayout(8,8));middle.setOpaque(false);main.add(middle,BorderLayout.CENTER);
-        JPanel acts=new JPanel(new BorderLayout(0,3));acts.setBorder(BorderFactory.createTitledBorder("CRUD và truy vấn trên cả hai database"));JPanel buttons=new JPanel(new FlowLayout(FlowLayout.LEFT));
-        for(Component c:new Component[]{new JLabel("ID"),id,new JLabel("Tên"),name,new JLabel("Môn"),subject,new JLabel("Điểm"),score})buttons.add(c);
-        buttons.add(button("INSERT",()->crud("insert")));buttons.add(button("UPDATE",()->crud("update")));buttons.add(button("DELETE",()->crud("delete")));buttons.add(new JLabel("Tìm tên"));buttons.add(query);buttons.add(button("QUERY",this::refresh));buttons.add(button("GROUP BY / AGGREGATE",this::aggregateScores));acts.add(buttons,BorderLayout.NORTH);
-        JPanel flex=new JPanel(new FlowLayout(FlowLayout.LEFT));flex.add(new JLabel("Thêm field riêng cho document:"));flex.add(fieldName);flex.add(new JLabel("Giá trị:"));flex.add(fieldValue);flex.add(button("THÊM FIELD NoSQL",this::addNoSqlField));acts.add(flex,BorderLayout.SOUTH);middle.add(acts,BorderLayout.NORTH);
-        JPanel tables=new JPanel(new GridLayout(1,2,8,0));tables.setOpaque(false);tables.add(box("SQL Server · Students JOIN Scores",new JTable(sqlModel)));tables.add(box("MongoDB · students collection (document)",new JTable(mongoModel)));
-        sqlCommand.setEditable(false);mongoCommand.setEditable(false);for(JTextArea t:new JTextArea[]{sqlCommand,mongoCommand}){t.setFont(new Font(Font.MONOSPACED,Font.PLAIN,12));t.setLineWrap(true);t.setWrapStyleWord(true);}
-        JPanel commands=new JPanel(new GridLayout(1,2,8,0));commands.add(textBox("LỆNH SQL SERVER",sqlCommand));commands.add(textBox("LỆNH MONGODB",mongoCommand));
-        comparison.setEditable(false);comparison.setLineWrap(true);comparison.setWrapStyleWord(true);comparison.setFont(new Font("SansSerif",Font.PLAIN,14));comparison.setText("LƯU TRỮ\nSQL Server: dữ liệu ở các bảng có cột và kiểu dữ liệu xác định. Ví dụ: Students và Scores.\nMongoDB: dữ liệu ở collection dưới dạng document BSON; điểm có thể nằm trong mảng scores của sinh viên.\n\nQUAN HỆ VÀ TRUY VẤN\nSQL Server thường tách dữ liệu liên quan rồi dùng JOIN; GROUP BY tổng hợp theo nhóm.\nMongoDB có thể nhúng dữ liệu liên quan trong document; find lọc document, aggregation pipeline biến đổi và nhóm dữ liệu.\n\nSCHEMA\nSQL Server áp dụng schema bảng; thay đổi cột thường cần DDL như ALTER TABLE.\nMongoDB cho phép các document cùng collection có field khác nhau; ứng dụng vẫn có thể đặt validation. Nút THÊM FIELD NoSQL chỉ thêm vào document đã chọn.\n\nGIAO DỊCH VÀ MỞ RỘNG\nCả hai hệ đều hỗ trợ giao dịch và chỉ mục. Cách cấu hình giao dịch nhiều document, replication và sharding khác nhau theo hệ thống. Ứng dụng này minh họa mô hình và lệnh cơ bản; không đo tốc độ hay mô phỏng replication.");
-        JTabbedPane detailTabs=new JTabbedPane();detailTabs.addTab("Câu lệnh đang dùng",commands);detailTabs.addTab("Giải thích khác biệt",new JScrollPane(comparison));detailTabs.addTab("Toán tử MongoDB ↔ SQL",operatorPanel());
-        JSplitPane contentSplit=new JSplitPane(JSplitPane.VERTICAL_SPLIT,tables,detailTabs);contentSplit.setResizeWeight(.68);contentSplit.setOneTouchExpandable(true);contentSplit.setContinuousLayout(true);contentSplit.setDividerSize(8);contentSplit.setBorder(null);contentSplit.setDividerLocation(.68);middle.add(contentSplit,BorderLayout.CENTER);
-        log.setEditable(false);log.setLineWrap(true);log.setWrapStyleWord(true);JScrollPane lp=new JScrollPane(log);lp.setBorder(BorderFactory.createTitledBorder("Truy vấn và trạng thái"));root.add(lp,BorderLayout.SOUTH);
-        setCommands("-- SQL: bảng Students và Scores\n-- Bấm QUERY để xem câu lệnh truy vấn.","// MongoDB: collection students\n// Mỗi document có thể có field riêng.");
-        say("SQL Server dùng tài khoản Windows hiện tại. MongoDB cần chạy local và không bật xác thực.");}
-    static JPanel pair(JComponent... cs){JPanel p=new JPanel(new FlowLayout(0,3,0));for(Component c:cs)p.add(c);return p;}
-    static void row(JPanel p,int y,String l,JComponent c){GridBagConstraints g=new GridBagConstraints();g.gridx=0;g.gridy=y;g.anchor=17;g.insets=new Insets(3,5,3,9);p.add(new JLabel(l),g);g.gridx=1;g.weightx=1;g.fill=2;p.add(c,g);}
-    static JPanel box(String t,JTable table){JPanel p=new JPanel(new BorderLayout());p.setBorder(BorderFactory.createTitledBorder(t));table.setRowHeight(25);p.add(new JScrollPane(table));return p;}
-    static JPanel textBox(String t,JTextArea area){JPanel p=new JPanel(new BorderLayout());p.setBorder(BorderFactory.createTitledBorder(t));p.add(new JScrollPane(area));return p;}
-    JPanel operatorPanel(){String[] headers={"Nhóm","Toán tử MongoDB","Ý nghĩa","Đối chiếu SQL Server"};DefaultTableModel m=model(headers);Object[][] data={
-        {"Read · so sánh","$eq, $ne, $gt, $gte, $lt, $lte","So sánh field với giá trị.","=, <>, >, >=, <, <=  ·  WHERE Score >= 8"},
-        {"Read · tập hợp","$in, $nin","Kiểm tra field có thuộc danh sách.","IN / NOT IN  ·  WHERE StudentId IN (1, 2)"},
-        {"Read · logic","$and, $or, $nor, $not","Kết hợp hoặc phủ định điều kiện; $nor nghĩa là không điều kiện nào đúng.","AND, OR, NOT  ·  NOT (A OR B)"},
-        {"Update · field","$set, $unset, $inc","Gán giá trị, bỏ field khỏi document, tăng/giảm số.","UPDATE SET col=value; col=col+delta. SQL Server không bỏ một cột riêng trên từng hàng."},
-        {"Update · mảng","$push, $pull, $addToSet","Thêm, xóa hoặc thêm phần tử chưa có vào mảng document.","Không có cột mảng tương đương trực tiếp trong SQL Server; thường dùng bảng con với INSERT/DELETE và ràng buộc UNIQUE."},
-        {"Delete","deleteOne(), deleteMany()","Xóa tối đa một document hoặc tất cả document khớp.","DELETE FROM table WHERE ...  ·  giới hạn hàng bằng điều kiện phù hợp."}
-    };for(Object[] r:data)m.addRow(r);JTable table=new JTable(m);table.setRowHeight(56);table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);int[] widths={120,190,380,420};for(int i=0;i<widths.length;i++)table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
-        JPanel panel=new JPanel(new BorderLayout(0,4));JLabel note=new JLabel("Bảng tham khảo cú pháp; không phải mọi toán tử đều có nút thao tác trong demo. SQL đối chiếu dưới đây là T‑SQL của SQL Server.");note.setBorder(new EmptyBorder(5,7,4,7));panel.add(note,BorderLayout.NORTH);panel.add(new JScrollPane(table),BorderLayout.CENTER);return panel;}
-    void setCommands(String sql,String mongo){sqlCommand.setText(sql);mongoCommand.setText(mongo);}
-    static String sqlLit(String s){return "N'"+s.replace("'","''")+"'";}
-    JButton button(String t,Runnable r){JButton b=new JButton(t);b.setBackground(new Color(37,99,235));b.setForeground(Color.WHITE);b.addActionListener(e->{try{r.run();}catch(Exception x){error(x);}});return b;}
-    void say(String s){log.append("• "+s+"\n");log.setCaretPosition(log.getDocument().getLength());}
-    void error(Exception e){Throwable x=e;while(x.getCause()!=null)x=x.getCause();say("LỖI: "+x.getMessage());JOptionPane.showMessageDialog(this,x.getMessage(),"Lỗi",JOptionPane.ERROR_MESSAGE);}
-    static String psq(String s){return "'"+s.replace("'","''")+"'";}
-    String sqlBase(String db){return "Data Source="+sqlInstance.getText().trim()+";Initial Catalog="+db+";Integrated Security=SSPI;Connect Timeout=5";}
-    static String readStream(InputStream in){try{return new String(in.readAllBytes(),StandardCharsets.UTF_8);}catch(IOException e){return e.getMessage();}}
-    String runPS(String script)throws Exception{String wrapped="$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new();"+script;String enc=Base64.getEncoder().encodeToString(wrapped.getBytes(StandardCharsets.UTF_16LE));Process p=new ProcessBuilder("powershell.exe","-NoProfile","-NonInteractive","-InputFormat","Text","-OutputFormat","Text","-EncodedCommand",enc).start();CompletableFuture<String> stdout=CompletableFuture.supplyAsync(()->readStream(p.getInputStream())),stderr=CompletableFuture.supplyAsync(()->readStream(p.getErrorStream()));int exit=p.waitFor();String out=stdout.get(),err=stderr.get();if(exit!=0){String msg=err.isBlank()?out:err;msg=msg.replace("#< CLIXML","").replaceAll("<[^>]+>"," ").replace("&amp;","&").replace("&lt;","<").replace("&gt;",">").replaceAll("\\s+"," ").trim();throw new IOException(msg.isBlank()?"PowerShell SQL command failed (exit "+exit+")":msg);}return out.trim();}
-    void sqlInit()throws Exception{String instance=psq(sqlInstance.getText().trim());String script="$ErrorActionPreference='Stop';$instance="+instance+";$c=New-Object System.Data.SqlClient.SqlConnection(\"Data Source=$instance;Initial Catalog=master;Integrated Security=SSPI;Connect Timeout=5\");$c.Open();$x=$c.CreateCommand();$x.CommandText=\"IF DB_ID(N'NoSqlComparison') IS NULL CREATE DATABASE [NoSqlComparison]\";$x.ExecuteNonQuery()|Out-Null;$c.Close();$c=New-Object System.Data.SqlClient.SqlConnection(\"Data Source=$instance;Initial Catalog=NoSqlComparison;Integrated Security=SSPI;Connect Timeout=5\");$c.Open();$x=$c.CreateCommand();$x.CommandText=\"IF OBJECT_ID('dbo.Students','U') IS NULL CREATE TABLE dbo.Students(StudentId INT PRIMARY KEY,Name NVARCHAR(150) NOT NULL); IF OBJECT_ID('dbo.Scores','U') IS NULL CREATE TABLE dbo.Scores(StudentId INT NOT NULL,Subject NVARCHAR(100) NOT NULL,Score FLOAT NOT NULL,PRIMARY KEY(StudentId,Subject))\";$x.ExecuteNonQuery()|Out-Null;$c.Close();'SQL_READY'";runPS(script);}
-    List<String[]> sqlQuery(String sql,Object... values)throws Exception{StringBuilder arr=new StringBuilder("@(");for(int i=0;i<values.length;i++){if(i>0)arr.append(",");String b=Base64.getEncoder().encodeToString(String.valueOf(values[i]).getBytes(StandardCharsets.UTF_8));arr.append(psq(b));}arr.append(")");String script="$ErrorActionPreference='Stop';$vals="+arr+";$c=New-Object System.Data.SqlClient.SqlConnection("+psq(sqlBase("NoSqlComparison"))+");$c.Open();$x=$c.CreateCommand();$x.CommandText="+psq(sql)+";for($i=0;$i -lt $vals.Count;$i++){$v=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($vals[$i]));$null=$x.Parameters.AddWithValue('@p'+$i,$v)};$r=$x.ExecuteReader();while($r.Read()){$a=@();for($i=0;$i -lt $r.FieldCount;$i++){if($r.IsDBNull($i)){$v=''}else{$v=[Convert]::ToString($r.GetValue($i),[Globalization.CultureInfo]::InvariantCulture)};$a+=,[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($v))};[Console]::WriteLine(($a -join \"`t\"))};$r.Close();$c.Close()";String raw=runPS(script);StringBuilder clean=new StringBuilder();boolean xml=false;for(String line:raw.split("\\R")){if(line.startsWith("#< CLIXML"))continue;if(line.startsWith("<Objs")){xml=true;continue;}if(xml){if(line.startsWith("</Objs>"))xml=false;continue;}clean.append(line).append('\n');}String out=clean.toString().trim();List<String[]> rows=new ArrayList<>();if(out.isBlank())return rows;for(String line:out.split("\\R")){String[] cols=line.split("\\t",-1),vals=new String[cols.length];for(int i=0;i<cols.length;i++)vals[i]=new String(Base64.getDecoder().decode(cols[i]),StandardCharsets.UTF_8);rows.add(vals);}return rows;}
-    void sqlExec(String sql,Object... values)throws Exception{StringBuilder arr=new StringBuilder("@(");for(int i=0;i<values.length;i++){if(i>0)arr.append(",");String b=Base64.getEncoder().encodeToString(String.valueOf(values[i]).getBytes(StandardCharsets.UTF_8));arr.append(psq(b));}arr.append(")");String script="$ErrorActionPreference='Stop';$vals="+arr+";$c=New-Object System.Data.SqlClient.SqlConnection("+psq(sqlBase("NoSqlComparison"))+");$c.Open();$x=$c.CreateCommand();$x.CommandText="+psq(sql)+";for($i=0;$i -lt $vals.Count;$i++){$v=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($vals[$i]));$null=$x.Parameters.AddWithValue('@p'+$i,$v)};$x.ExecuteNonQuery()|Out-Null;$c.Close()";runPS(script);}
-    Mongo mongo()throws IOException{return new Mongo(host.getText().trim(),Integer.parseInt(port.getText().trim()),database.getText().trim());}
-    void connect(){sqlReady=mongoReady=false;try{sqlInit();sqlReady=true;say("SQL Server: kết nối Windows thành công; database và bảng đã sẵn sàng.");}catch(Exception e){say("SQL Server: "+e.getMessage());}try(Mongo m=mongo()){m.command(doc("ping",1));mongoReady=true;say("MongoDB: ping thành công tại "+host.getText()+":"+port.getText());}catch(Exception e){say("MongoDB: "+e.getMessage());}
-        if(sqlReady&&mongoReady)refresh();}
-    void require(){if(!sqlReady||!mongoReady)throw new IllegalStateException("Hãy kết nối thành công cả SQL Server và MongoDB trước.");}
-    void addNoSqlField(){require();int n=Integer.parseInt(id.getText().trim());String key=fieldName.getText().trim(),value=fieldValue.getText();if(!key.matches("[A-Za-z][A-Za-z0-9_]*")||Set.of("_id","name","scores").contains(key))throw new IllegalArgumentException("Tên field phải hợp lệ và không được trùng _id, name hoặc scores.");
-        try(Mongo m=mongo()){m.command(doc("update","students","updates",List.of(doc("q",doc("_id",n),"u",doc("$set",doc(key,value)),"upsert",false))));say("Đã thêm field '"+key+"' vào document "+n+". SQL cần ALTER TABLE để thêm cột tương ứng; câu lệnh SQL chỉ hiển thị minh họa.");refresh();setCommands("-- Nếu thêm cột tương ứng vào SQL Server:\nALTER TABLE dbo.Students ADD ["+key+"] NVARCHAR(100) NULL;\n-- Lệnh trên chỉ minh họa, chưa chạy.","db.students.updateOne(\n  { _id: "+n+" },\n  { $set: { "+key+": "+json(value)+" } }\n);");}catch(Exception e){throw new RuntimeException("Không thêm được field: "+e.getMessage(),e);}}
-    void crud(String op){require();int n=Integer.parseInt(id.getText().trim());String nm=name.getText().trim(),sub=subject.getText().trim();double sc=Double.parseDouble(score.getText().trim());
-        if(op.equals("insert"))setCommands("INSERT INTO dbo.Students(StudentId,Name) VALUES (@p0,@p1);\nINSERT INTO dbo.Scores(StudentId,Subject,Score) VALUES (@p0,@p2,@p3);\n-- Giá trị: "+n+", "+sqlLit(nm)+", "+sqlLit(sub)+", "+sc,"db.students.updateOne({_id: "+n+"}, {$set: {name: "+json(nm)+"}}, {upsert:true});\ndb.students.updateOne({_id: "+n+"}, {$addToSet: {scores: {subject: "+json(sub)+", score: "+sc+"}}}, {upsert:true});");
-        else if(op.equals("update"))setCommands("UPDATE dbo.Students SET Name=@p0 WHERE StudentId=@p1;\nUPDATE dbo.Scores SET Score=@p0 WHERE StudentId=@p1 AND Subject=@p2;\n-- Giá trị: "+sqlLit(nm)+", "+n+", "+sqlLit(sub)+", "+sc,"db.students.updateOne({_id: "+n+"}, {$set: {name: "+json(nm)+"}});\ndb.students.updateOne({_id: "+n+", 'scores.subject': "+json(sub)+"}, {$set: {'scores.$.score': "+sc+"}});");
-        else setCommands("DELETE FROM dbo.Scores WHERE StudentId=@p0;\nDELETE FROM dbo.Students WHERE StudentId=@p0;\n-- Giá trị: "+n,"db.students.deleteOne({_id: "+n+"});");
-        try(Mongo m=mongo()){if(op.equals("insert")){if(!sqlQuery("SELECT StudentId FROM dbo.Students WHERE StudentId=@p0",n).isEmpty())throw new IllegalArgumentException("Mã sinh viên "+n+" đã tồn tại. Hãy đổi ID để INSERT hoặc dùng UPDATE để sửa.");sqlExec("INSERT INTO dbo.Students VALUES(@p0,@p1)",n,nm);sqlExec("INSERT INTO dbo.Scores VALUES(@p0,@p1,@p2)",n,sub,sc);
-            m.command(doc("update","students","updates",List.of(doc("q",doc("_id",n),"u",doc("$set",doc("name",nm)),"upsert",true))));m.command(doc("update","students","updates",List.of(doc("q",doc("_id",n),"u",doc("$addToSet",doc("scores",doc("subject",sub,"score",sc))),"upsert",true))));}
-        else if(op.equals("update")){sqlExec("UPDATE dbo.Students SET Name=@p0 WHERE StudentId=@p1",nm,n);sqlExec("UPDATE dbo.Scores SET Score=@p0 WHERE StudentId=@p1 AND Subject=@p2",sc,n,sub);m.command(doc("update","students","updates",List.of(doc("q",doc("_id",n),"u",doc("$set",doc("name",nm)),"upsert",false))));m.command(doc("update","students","updates",List.of(doc("q",doc("_id",n),"u",doc("$set",doc("scores.$[s].score",sc)),"arrayFilters",List.of(doc("s.subject",sub)),"upsert",false))));}
-        else{sqlExec("DELETE FROM dbo.Scores WHERE StudentId=@p0",n);sqlExec("DELETE FROM dbo.Students WHERE StudentId=@p0",n);m.command(doc("delete","students","deletes",List.of(doc("q",doc("_id",n),"limit",1))));}
-        say(op.toUpperCase()+" đã ghi vào cả hai database. Hai hệ không có transaction phân tán; nếu một bên lỗi, hãy đối chiếu dữ liệu.");refresh();}catch(Exception e){throw new RuntimeException("CRUD "+op+" có thể đã cập nhật một phía trước khi lỗi: "+e.getMessage(),e);}}
-    void refresh(){require();sqlModel.setRowCount(0);mongoModel.setRowCount(0);String q=query.getText().trim();setCommands("SELECT s.StudentId,s.Name,c.Subject,c.Score\nFROM dbo.Students s LEFT JOIN dbo.Scores c ON c.StudentId=s.StudentId\nWHERE s.Name LIKE @p0 ORDER BY s.StudentId,c.Subject;\n-- @p0 = "+sqlLit("%"+q+"%"),"db.students.find(\n  { name: /"+q.replace("/","\\/")+"/i }\n).pretty();");try{for(String[] r:sqlQuery("SELECT s.StudentId,s.Name,c.Subject,c.Score FROM dbo.Students s LEFT JOIN dbo.Scores c ON c.StudentId=s.StudentId WHERE s.Name LIKE @p0 ORDER BY s.StudentId,c.Subject","%"+q+"%"))sqlModel.addRow(new Object[]{r[0],r[1],r[2],r[3]});say("SQL: SELECT Students JOIN Scores WHERE Name LIKE '%"+q+"%'");}catch(Exception e){throw new RuntimeException("SQL query: "+e.getMessage(),e);}
-        try(Mongo m=mongo()){Map<String,Object> x=m.command(doc("find","students","filter",doc("name",doc("$regex",q,"$options","i"))));Map<?,?> cur=(Map<?,?>)x.get("cursor");List<?> batch=(List<?>)cur.get("firstBatch");for(Object v:batch){Map<?,?> d=(Map<?,?>)v;mongoModel.addRow(new Object[]{d.get("_id"),json(d)});}say("MongoDB: db.students.find({name: /"+q+"/i}) → "+batch.size()+" document(s)");}catch(Exception e){throw new RuntimeException("MongoDB query: "+e.getMessage(),e);}}
-    void aggregateScores(){require();sqlModel.setRowCount(0);mongoModel.setRowCount(0);setCommands("SELECT c.Subject, AVG(c.Score) AS AverageScore, COUNT(*) AS ScoreCount\nFROM dbo.Scores c\nGROUP BY c.Subject ORDER BY c.Subject;","db.students.aggregate([\n  { $unwind: '$scores' },\n  { $group: { _id: '$scores.subject', averageScore: { $avg: '$scores.score' }, scoreCount: { $sum: 1 } } },\n  { $sort: { _id: 1 } }\n]);");
-        try{for(String[] r:sqlQuery("SELECT Subject, AVG(Score), COUNT(*) FROM dbo.Scores GROUP BY Subject ORDER BY Subject"))sqlModel.addRow(new Object[]{"GROUP",r[2]+" điểm",r[0],r[1]});say("SQL Server: GROUP BY đã tổng hợp điểm theo môn.");}catch(Exception e){throw new RuntimeException("SQL GROUP BY: "+e.getMessage(),e);}
-        try(Mongo m=mongo()){Map<String,Object> result=m.command(doc("aggregate","students","pipeline",List.of(doc("$unwind","$scores"),doc("$group",doc("_id","$scores.subject","averageScore",doc("$avg","$scores.score"),"scoreCount",doc("$sum",1))),doc("$sort",doc("_id",1))),"cursor",doc()));Map<?,?> cursor=(Map<?,?>)result.get("cursor");List<?> batch=(List<?>)cursor.get("firstBatch");for(Object row:batch){Map<?,?> d=(Map<?,?>)row;mongoModel.addRow(new Object[]{d.get("_id"),json(d)});}say("MongoDB: aggregation pipeline trả "+batch.size()+" nhóm môn học.");}catch(Exception e){throw new RuntimeException("MongoDB aggregation: "+e.getMessage(),e);}}
-    static Map<String,Object> doc(Object... kv){Map<String,Object> d=new LinkedHashMap<>();for(int i=0;i<kv.length;i+=2)d.put((String)kv[i],kv[i+1]);return d;}
-    static String json(Object o){if(o==null)return "null";if(o instanceof String s)return "\""+s.replace("\\","\\\\").replace("\"","\\\"")+"\"";if(o instanceof Map<?,?>m){List<String>a=new ArrayList<>();m.forEach((k,v)->a.add(json(k)+": "+json(v)));return "{"+String.join(", ",a)+"}";}if(o instanceof List<?>l){List<String>a=new ArrayList<>();for(Object v:l)a.add(json(v));return "["+String.join(", ",a)+"]";}return String.valueOf(o);}
-    static final class Mongo implements AutoCloseable {Socket s=new Socket();InputStream in;OutputStream out;String db;int seq=1;Mongo(String h,int p,String d)throws IOException{db=d;s.connect(new InetSocketAddress(h,p),2500);s.setSoTimeout(4000);in=s.getInputStream();out=s.getOutputStream();command(doc("hello",1,"$db","admin"));}public void close()throws IOException{s.close();}
-        Map<String,Object> command(Map<String,Object>d)throws IOException{d.putIfAbsent("$db",db);byte[] b=Bson.enc(d);int id=seq++,len=21+b.length;ByteArrayOutputStream z=new ByteArrayOutputStream();DataOutputStream w=new DataOutputStream(z);w.write(Bson.le(len,4));w.write(Bson.le(id,4));w.write(Bson.le(0,4));w.write(Bson.le(2013,4));w.write(Bson.le(0,4));w.writeByte(0);w.write(b);out.write(z.toByteArray());out.flush();byte[] h=read(16);Cur hd=new Cur(h);int n=hd.i32();hd.i32();hd.i32();int op=hd.i32();if(n<21||n>32000000)throw new IOException("Mongo frame không hợp lệ");byte[] body=read(n-16);if(op!=2013)throw new IOException("Mongo opcode không hỗ trợ");Cur x=new Cur(body);int flags=x.i32();if((flags&1)!=0)throw new IOException("OP_MSG checksum không hỗ trợ");if(x.u()!=0)throw new IOException("Mongo section không hỗ trợ");Map<String,Object> r=Bson.dec(Arrays.copyOfRange(body,x.p,body.length));if(r.get("ok") instanceof Number a&&a.doubleValue()==0)throw new IOException(String.valueOf(r.get("errmsg")));return r;}
-        byte[] read(int n)throws IOException{byte[] b=in.readNBytes(n);if(b.length!=n)throw new EOFException("Mongo đóng kết nối");return b;}}
-    static final class Bson {static byte[] enc(Map<String,?>m)throws IOException{ByteArrayOutputStream b=new ByteArrayOutputStream();DataOutputStream d=new DataOutputStream(b);for(var e:m.entrySet())el(d,e.getKey(),e.getValue());d.writeByte(0);byte[] body=b.toByteArray();ByteArrayOutputStream o=new ByteArrayOutputStream();DataOutputStream x=new DataOutputStream(o);x.write(le(body.length+4,4));x.write(body);return o.toByteArray();}
-        static void el(DataOutputStream d,String k,Object v)throws IOException{int t;byte[] b;if(v instanceof String s){t=2;byte[] z=s.getBytes(StandardCharsets.UTF_8);ByteArrayOutputStream o=new ByteArrayOutputStream();DataOutputStream x=new DataOutputStream(o);x.write(le(z.length+1,4));x.write(z);x.writeByte(0);b=o.toByteArray();}else if(v instanceof Integer n){t=16;b=le(n,4);}else if(v instanceof Long n){t=18;b=le(n,8);}else if(v instanceof Number n){t=1;b=le(Double.doubleToLongBits(n.doubleValue()),8);}else if(v instanceof Boolean q){t=8;b=new byte[]{(byte)(q?1:0)};}else if(v instanceof Map<?,?>m){t=3;b=enc((Map<String,?>)m);}else if(v instanceof List<?>l){t=4;Map<String,Object>a=new LinkedHashMap<>();for(int i=0;i<l.size();i++)a.put(""+i,l.get(i));b=enc(a);}else if(v==null){t=10;b=new byte[0];}else throw new IOException("BSON type không hỗ trợ");d.writeByte(t);d.write(k.getBytes(StandardCharsets.UTF_8));d.writeByte(0);d.write(b);}
-        static byte[] le(long n,int k)throws IOException{ByteArrayOutputStream b=new ByteArrayOutputStream();for(int i=0;i<k;i++)b.write((int)(n>>(i*8)));return b.toByteArray();}static Map<String,Object> dec(byte[] b)throws IOException{Cur c=new Cur(b);int n=c.i32();if(n!=b.length)throw new IOException("BSON length sai");Map<String,Object>m=new LinkedHashMap<>();while(c.p<b.length-1){int t=c.u();String k=c.cstr();Object v=switch(t){case 1->Double.longBitsToDouble(c.i64());case 2,13,14->c.str();case 3->dec(c.sub());case 4->new ArrayList<>(dec(c.sub()).values());case 7->c.hex(12);case 8->c.u()!=0;case 9,17->c.i64();case 10->null;case 11->List.of(c.cstr(),c.cstr());case 16->c.i32();case 18->c.i64();case 5->{int z=c.i32();c.u();yield c.hexBytes(z);}case 19->c.hexBytes(16);default->throw new IOException("BSON response type không hỗ trợ: "+t);};m.put(k,v);}return m;}}
-    static final class Cur {byte[]b;int p;Cur(byte[]b){this.b=b;}int u()throws IOException{if(p>=b.length)throw new EOFException();return b[p++]&255;}int i32()throws IOException{return u()|u()<<8|u()<<16|u()<<24;}long i64()throws IOException{return (i32()&0xffffffffL)|((long)i32()<<32);}byte[] raw(int n)throws IOException{if(n<0||n>b.length-p)throw new IOException("BSON field length sai");byte[]x=Arrays.copyOfRange(b,p,p+n);p+=n;return x;}String hexBytes(int n)throws IOException{byte[]x=raw(n);StringBuilder s=new StringBuilder();for(byte q:x)s.append(String.format("%02x",q&255));return s.toString();}String hex(int n)throws IOException{return hexBytes(n);}String cstr()throws IOException{ByteArrayOutputStream o=new ByteArrayOutputStream();int q;while((q=u())!=0)o.write(q);return o.toString(StandardCharsets.UTF_8);}String str()throws IOException{int n=i32();if(n<1||n>b.length-p)throw new IOException("BSON string length sai");byte[]x=Arrays.copyOfRange(b,p,p+n-1);p+=n-1;if(u()!=0)throw new IOException("BSON terminator sai");return new String(x,StandardCharsets.UTF_8);}byte[] sub()throws IOException{int n=i32();if(n<5||n-4>b.length-p)throw new IOException("BSON document length sai");byte[]x=new byte[n];x[0]=(byte)n;x[1]=(byte)(n>>8);x[2]=(byte)(n>>16);x[3]=(byte)(n>>24);System.arraycopy(b,p,x,4,n-4);p+=n-4;return x;}}
-    public static void main(String[]a){SwingUtilities.invokeLater(()->{NoSqlVsSqlDemo app=new NoSqlVsSqlDemo();app.setVisible(true);javax.swing.Timer t=new javax.swing.Timer(350,e->app.connect());t.setRepeats(false);t.start();});}
+    private final JTextField idField = new JTextField("3", 5);
+    private final JTextField nameField = new JTextField("Lan", 9);
+    private final JTextField subjectField = new JTextField("DBMS", 9);
+    private final JTextField scoreField = new JTextField("9", 4);
+    private final JTextField queryField = new JTextField(10);
+    private final JTextField extraField = new JTextField("hobby", 8);
+    private final JTextField extraValue = new JTextField("Đọc sách", 10);
+
+    private final DefaultTableModel sqlModel = model("Student ID", "Name", "Subject", "Score");
+    private final DefaultTableModel mongoModel = model("_id", "Document JSON");
+    private final JTextArea sqlCommand = commandArea();
+    private final JTextArea mongoCommand = commandArea();
+    private final JTextArea sqlInput = new JTextArea();
+    private final JTextArea mongoOutput = commandArea();
+    private final JTextArea explanation = new JTextArea();
+    private final JTextArea log = new JTextArea(4, 80);
+
+    // Simulated SQL tables: Students and Scores are kept separately and joined for display.
+    private final LinkedHashMap<Integer, String> sqlStudents = new LinkedHashMap<>();
+    private final ArrayList<SqlScore> sqlScores = new ArrayList<>();
+    // Simulated Mongo collection: each student document embeds its scores array.
+    private final LinkedHashMap<Integer, LinkedHashMap<String, Object>> mongoStudents = new LinkedHashMap<>();
+
+    private static final class SqlScore {
+        final int studentId;
+        final String subject;
+        double score;
+        SqlScore(int studentId, String subject, double score) {
+            this.studentId = studentId; this.subject = subject; this.score = score;
+        }
+    }
+
+    public NoSqlVsSqlDemo() {
+        super("NoSQL vs SQL — Database Visual Lab (Mô phỏng)");
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setSize(1360, 900);
+        setMinimumSize(new Dimension(1050, 700));
+        setLocationRelativeTo(null);
+
+        JPanel root = new JPanel(new BorderLayout(8, 8));
+        root.setBorder(new EmptyBorder(12, 12, 12, 12));
+        root.setBackground(new Color(245, 248, 252));
+        setContentPane(root);
+
+        JLabel title = new JLabel("NoSQL vs SQL — Database Visual Lab", JLabel.CENTER);
+        title.setFont(new Font("SansSerif", Font.BOLD, 23));
+        root.add(title, BorderLayout.NORTH);
+
+        JPanel main = new JPanel(new BorderLayout(8, 8));
+        main.setOpaque(false);
+        root.add(main, BorderLayout.CENTER);
+
+        JPanel mode = new JPanel(new BorderLayout(10, 0));
+        mode.setBorder(BorderFactory.createTitledBorder("CHẾ ĐỘ MÔ PHỎNG · không kết nối server thật"));
+        JLabel modeText = new JLabel("SQL Server và MongoDB được mô phỏng riêng trong bộ nhớ. Dữ liệu sẽ trở về mẫu khi đóng ứng dụng.");
+        modeText.setForeground(new Color(30, 75, 120));
+        mode.add(modeText, BorderLayout.CENTER);
+        mode.add(button("NẠP LẠI DỮ LIỆU MẪU", this::resetDemo), BorderLayout.EAST);
+        main.add(mode, BorderLayout.NORTH);
+
+        JPanel work = new JPanel(new BorderLayout(8, 8));
+        work.setOpaque(false);
+        main.add(work, BorderLayout.CENTER);
+
+        JPanel actions = new JPanel(new BorderLayout(0, 3));
+        actions.setBorder(BorderFactory.createTitledBorder("Thao tác trên hai mô hình mô phỏng"));
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        for (Component c : new Component[]{new JLabel("ID"), idField, new JLabel("Tên"), nameField,
+                new JLabel("Môn"), subjectField, new JLabel("Điểm"), scoreField}) controls.add(c);
+        controls.add(button("INSERT", () -> crud("insert")));
+        controls.add(button("UPDATE", () -> crud("update")));
+        controls.add(button("DELETE", () -> crud("delete")));
+        controls.add(new JLabel("Tìm tên")); controls.add(queryField);
+        controls.add(button("QUERY", this::refresh));
+        controls.add(button("GROUP BY / AGGREGATE", this::aggregateScores));
+        actions.add(controls, BorderLayout.NORTH);
+
+        JPanel addField = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        addField.add(new JLabel("Field riêng cho document:")); addField.add(extraField);
+        addField.add(new JLabel("Giá trị:")); addField.add(extraValue);
+        addField.add(button("THÊM FIELD NoSQL", this::addNoSqlField));
+        actions.add(addField, BorderLayout.SOUTH);
+        work.add(actions, BorderLayout.NORTH);
+
+        JPanel tables = new JPanel(new GridLayout(1, 2, 8, 0));
+        tables.setOpaque(false);
+        tables.add(tableBox("SQL Server · Students JOIN Scores (mô phỏng)", new JTable(sqlModel)));
+        tables.add(tableBox("MongoDB · students collection (mô phỏng)", new JTable(mongoModel)));
+
+        JPanel commandPanels = new JPanel(new GridLayout(1, 2, 8, 0));
+        commandPanels.add(textBox("LỆNH SQL SERVER · minh họa", sqlCommand));
+        commandPanels.add(textBox("LỆNH MONGODB · minh họa", mongoCommand));
+
+        explanation.setEditable(false);
+        explanation.setLineWrap(true);
+        explanation.setWrapStyleWord(true);
+        explanation.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        explanation.setText("MÔ HÌNH LƯU TRỮ\n"
+                + "SQL Server: Students và Scores là hai bảng riêng; StudentId nối chúng thành quan hệ.\n"
+                + "MongoDB: mỗi sinh viên là một document; điểm có thể nhúng trong mảng scores.\n\n"
+                + "TRUY VẤN VÀ CẤU TRÚC\n"
+                + "SQL dùng SELECT/JOIN và GROUP BY. MongoDB dùng find() và aggregation pipeline.\n"
+                + "MongoDB document có thể có field khác nhau; SQL thường thay đổi cấu trúc bảng bằng DDL.\n\n"
+                + "GIỚI HẠN CỦA DEMO\n"
+                + "Các thao tác cập nhật dữ liệu mẫu trong bộ nhớ Java. Câu lệnh hiển thị chỉ để học và so sánh, không được gửi tới SQL Server hay MongoDB. Không mô phỏng hiệu năng, phân quyền, giao dịch phân tán, replication hoặc sharding.");
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.addTab("Câu lệnh đang dùng", commandPanels);
+        tabs.addTab("Giải thích khác biệt", new JScrollPane(explanation));
+        tabs.addTab("Toán tử MongoDB ↔ SQL", operatorPanel());
+        tabs.addTab("Viết SQL → NoSQL", translatorPanel());
+
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tables, tabs);
+        split.setResizeWeight(.68);
+        split.setOneTouchExpandable(true);
+        split.setContinuousLayout(true);
+        split.setDividerSize(8);
+        split.setBorder(null);
+        split.setDividerLocation(.68);
+        work.add(split, BorderLayout.CENTER);
+
+        log.setEditable(false);
+        log.setLineWrap(true);
+        log.setWrapStyleWord(true);
+        JScrollPane status = new JScrollPane(log);
+        status.setBorder(BorderFactory.createTitledBorder("Truy vấn và trạng thái · mô phỏng"));
+        root.add(status, BorderLayout.SOUTH);
+
+        seedData();
+        refresh();
+        say("Đang chạy hoàn toàn trong bộ nhớ Java; không cần cài hoặc khởi động SQL Server/MongoDB.");
+    }
+
+    private static DefaultTableModel model(String... headers) {
+        return new DefaultTableModel(headers, 0) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
+    }
+
+    private static JTextArea commandArea() {
+        JTextArea area = new JTextArea(4, 42);
+        area.setEditable(false);
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        return area;
+    }
+
+    private JButton button(String label, Runnable action) {
+        JButton b = new JButton(label);
+        b.setBackground(new Color(37, 99, 235));
+        b.setForeground(Color.WHITE);
+        b.addActionListener(e -> {
+            try { action.run(); }
+            catch (Exception ex) {
+                String message = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                say("LỖI: " + message);
+                JOptionPane.showMessageDialog(this, message, "Lỗi mô phỏng", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        return b;
+    }
+
+    private static JPanel tableBox(String title, JTable table) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(title));
+        table.setRowHeight(25);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private static JPanel textBox(String title, JTextArea text) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(title));
+        panel.add(new JScrollPane(text), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel operatorPanel() {
+        String[] headers = {"Nhóm", "Toán tử MongoDB", "Ý nghĩa", "Đối chiếu SQL Server"};
+        DefaultTableModel m = model(headers);
+        Object[][] rows = {
+                {"Read · so sánh", "$eq, $ne, $gt, $gte, $lt, $lte", "So sánh field với giá trị.", "=, <>, >, >=, <, <= · WHERE Score >= 8"},
+                {"Read · tập hợp", "$in, $nin", "Kiểm tra field có thuộc danh sách.", "IN / NOT IN · WHERE StudentId IN (1, 2)"},
+                {"Read · logic", "$and, $or, $nor, $not", "Kết hợp hoặc phủ định điều kiện.", "AND, OR, NOT · NOT (A OR B)"},
+                {"Update · field", "$set, $unset, $inc", "Gán, bỏ field hoặc tăng/giảm số.", "UPDATE SET col=value; col=col+delta"},
+                {"Update · mảng", "$push, $pull, $addToSet", "Thêm, xóa hoặc thêm phần tử duy nhất vào mảng.", "Thường dùng bảng con, INSERT/DELETE và UNIQUE"},
+                {"Delete", "deleteOne(), deleteMany()", "Xóa một hoặc nhiều document khớp điều kiện.", "DELETE FROM table WHERE ..."}
+        };
+        for (Object[] row : rows) m.addRow(row);
+        JTable table = new JTable(m);
+        table.setRowHeight(56);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        int[] widths = {120, 190, 380, 420};
+        for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
+        JLabel note = new JLabel("Bảng tham khảo cú pháp; ứng dụng không gửi các lệnh này tới database thật.");
+        note.setBorder(new EmptyBorder(5, 7, 4, 7));
+        panel.add(note, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel translatorPanel() {
+        JPanel panel = new JPanel(new BorderLayout(6, 6));
+        JPanel toolbar = new JPanel(new BorderLayout(8, 0));
+        JLabel note = new JLabel("Nhập SELECT đơn giản từ Students; hỗ trợ WHERE với StudentId, Name, Subject, Score và AND.");
+        toolbar.add(note, BorderLayout.CENTER);
+        toolbar.add(button("DỊCH SQL → MONGODB & LỌC", this::translateSqlToMongo), BorderLayout.EAST);
+        panel.add(toolbar, BorderLayout.NORTH);
+
+        sqlInput.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        sqlInput.setLineWrap(true);
+        sqlInput.setWrapStyleWord(true);
+        sqlInput.setText("SELECT s.StudentId, s.Name, c.Subject, c.Score\n"
+                + "FROM Students s LEFT JOIN Scores c ON c.StudentId=s.StudentId\n"
+                + "WHERE s.Name LIKE '%Lan%';");
+        mongoOutput.setText("Bản dịch MongoDB sẽ hiện ở đây.");
+        JSplitPane editors = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                textBox("TRUY VẤN SQL BẠN NHẬP", sqlInput), textBox("MONGODB TƯƠNG ĐƯƠNG (MÔ PHỎNG)", mongoOutput));
+        editors.setResizeWeight(.5);
+        editors.setDividerLocation(.5);
+        panel.add(editors, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private static final class QueryCondition {
+        final String sqlField, mongoField, operator;
+        final Object value;
+        QueryCondition(String sqlField, String mongoField, String operator, Object value) {
+            this.sqlField = sqlField; this.mongoField = mongoField; this.operator = operator; this.value = value;
+        }
+    }
+
+    private void translateSqlToMongo() {
+        String sql = sqlInput.getText().trim();
+        if (!sql.regionMatches(true, 0, "SELECT", 0, 6) || !Pattern.compile("(?i)\\bFROM\\s+(?:\\[?dbo\\]?\\.)?\\[?Students\\]?\\b").matcher(sql).find())
+            throw new IllegalArgumentException("Bản dịch hiện hỗ trợ SELECT ... FROM Students, có thể JOIN Scores.");
+        Matcher whereMatcher = Pattern.compile("(?is)\\bWHERE\\b(.+)$").matcher(sql);
+        String where = whereMatcher.find() ? whereMatcher.group(1).replaceFirst(";\\s*$", "").trim() : "";
+        where = where.replaceFirst("(?is)\\s+ORDER\\s+BY\\s+.+$", "").trim();
+        if (where.toUpperCase(Locale.ROOT).contains(" OR "))
+            throw new IllegalArgumentException("Bản dịch bản này hỗ trợ điều kiện AND; OR chưa được hỗ trợ.");
+
+        ArrayList<QueryCondition> conditions = new ArrayList<>();
+        if (!where.isBlank()) {
+            Pattern conditionPattern = Pattern.compile("(?i)^(?:[A-Za-z_]\\w*\\.)?\\[?(StudentId|Name|Subject|Score)\\]?\\s*(LIKE|>=|<=|<>|=|>|<)\\s*(?:N)?(?:'((?:''|[^'])*)'|(-?\\d+(?:\\.\\d+)?))$");
+            for (String part : where.split("(?i)\\s+AND\\s+")) {
+                Matcher m = conditionPattern.matcher(part.trim());
+                if (!m.matches()) throw new IllegalArgumentException("Điều kiện chưa hỗ trợ: " + part.trim());
+                String field = m.group(1);
+                String op = m.group(2).toUpperCase(Locale.ROOT);
+                Object value = m.group(3) != null ? m.group(3).replace("''", "'") : Double.valueOf(m.group(4));
+                String mongoField = switch (field.toLowerCase(Locale.ROOT)) {
+                    case "studentid" -> "_id";
+                    case "name" -> "name";
+                    case "subject" -> "scores.subject";
+                    default -> "scores.score";
+                };
+                if (op.equals("LIKE") && !(value instanceof String)) throw new IllegalArgumentException("LIKE chỉ dùng với Name hoặc Subject.");
+                conditions.add(new QueryCondition(field, mongoField, op, value));
+            }
+        }
+
+        String filter = mongoFilter(conditions);
+        boolean joinsScores = Pattern.compile("(?i)\\bJOIN\\s+Scores\\b").matcher(sql).find();
+        String comment = joinsScores ? "// JOIN Scores được ánh xạ sang mảng scores nhúng trong document.\n" : "";
+        String translated = comment + "db.students.find(" + filter + ").pretty();\n\n"
+                + "// Đây là bản dịch giới hạn cho cú pháp SELECT/WHERE được hỗ trợ; chỉ mô phỏng trong bộ nhớ.";
+        mongoOutput.setText(translated);
+        applyTranslatedFilter(conditions);
+        say("Đã dịch truy vấn SELECT đơn giản sang MongoDB find() và lọc dữ liệu mô phỏng.");
+    }
+
+    private static String mongoFilter(List<QueryCondition> conditions) {
+        if (conditions.isEmpty()) return "{}";
+        ArrayList<String> clauses = new ArrayList<>();
+        for (QueryCondition c : conditions) {
+            if (c.operator.equals("LIKE")) {
+                clauses.add(json(c.mongoField) + ": /" + sqlLikeRegex(String.valueOf(c.value)) + "/i");
+            } else if (c.operator.equals("=")) {
+                clauses.add(json(c.mongoField) + ": " + mongoLiteral(c.value));
+            } else {
+                String op = switch (c.operator) {
+                    case "<>" -> "$ne"; case ">" -> "$gt"; case ">=" -> "$gte";
+                    case "<" -> "$lt"; case "<=" -> "$lte";
+                    default -> throw new IllegalArgumentException("Toán tử chưa hỗ trợ: " + c.operator);
+                };
+                clauses.add(json(c.mongoField) + ": { " + op + ": " + mongoLiteral(c.value) + " }");
+            }
+        }
+        return clauses.size() == 1 ? "{ " + clauses.get(0) + " }" : "{ $and: [{ " + String.join(" }, { ", clauses) + " }] }";
+    }
+
+    private static String mongoLiteral(Object value) {
+        return value instanceof String s ? json(s) : String.valueOf(value);
+    }
+
+    private static String sqlLikeRegex(String pattern) {
+        StringBuilder regex = new StringBuilder();
+        for (char ch : pattern.toCharArray()) {
+            if (ch == '%') regex.append(".*");
+            else if (ch == '_') regex.append('.');
+            else if ("\\.^$|?*+()[]{}".indexOf(ch) >= 0) regex.append('\\').append(ch);
+            else regex.append(ch);
+        }
+        return regex.toString();
+    }
+
+    private void applyTranslatedFilter(List<QueryCondition> conditions) {
+        sqlModel.setRowCount(0); mongoModel.setRowCount(0);
+        for (Map.Entry<Integer, String> student : sqlStudents.entrySet()) {
+            boolean emitted = false;
+            for (SqlScore row : sqlScores) {
+                if (row.studentId != student.getKey() || !matchesSqlRow(student.getKey(), student.getValue(), row, conditions)) continue;
+                sqlModel.addRow(new Object[]{student.getKey(), student.getValue(), row.subject, row.score});
+                emitted = true;
+            }
+            if (!emitted && sqlScores.stream().noneMatch(r -> r.studentId == student.getKey())
+                    && matchesSqlRow(student.getKey(), student.getValue(), null, conditions))
+                sqlModel.addRow(new Object[]{student.getKey(), student.getValue(), "", ""});
+        }
+        for (Map<String, Object> document : mongoStudents.values())
+            if (matchesMongoDocument(document, conditions)) mongoModel.addRow(new Object[]{document.get("_id"), json(document)});
+    }
+
+    private boolean matchesSqlRow(int studentId, String studentName, SqlScore row, List<QueryCondition> conditions) {
+        for (QueryCondition c : conditions) {
+            Object actual = switch (c.sqlField.toLowerCase(Locale.ROOT)) {
+                case "studentid" -> studentId;
+                case "name" -> studentName;
+                case "subject" -> row == null ? null : row.subject;
+                default -> row == null ? null : row.score;
+            };
+            if (!matchesValue(actual, c.operator, c.value)) return false;
+        }
+        return true;
+    }
+
+    private boolean matchesMongoDocument(Map<String, Object> document, List<QueryCondition> conditions) {
+        for (QueryCondition c : conditions) {
+            if (c.mongoField.equals("_id") && !matchesValue(document.get("_id"), c.operator, c.value)) return false;
+            if (c.mongoField.equals("name") && !matchesValue(document.get("name"), c.operator, c.value)) return false;
+            if (c.mongoField.startsWith("scores.")) {
+                String key = c.mongoField.substring("scores.".length());
+                boolean found = false;
+                for (Map<String, Object> scoreDoc : scoresOf(document))
+                    if (matchesValue(scoreDoc.get(key), c.operator, c.value)) { found = true; break; }
+                if (!found) return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesValue(Object actual, String operator, Object expected) {
+        if (actual == null) return false;
+        if (operator.equals("LIKE")) {
+            int flags = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+            return Pattern.compile(sqlLikeRegex(String.valueOf(expected)), flags).matcher(String.valueOf(actual)).matches();
+        }
+        int comparison;
+        if (actual instanceof Number a && expected instanceof Number b) comparison = Double.compare(a.doubleValue(), b.doubleValue());
+        else comparison = String.valueOf(actual).compareToIgnoreCase(String.valueOf(expected));
+        return switch (operator) {
+            case "=" -> comparison == 0; case "<>" -> comparison != 0; case ">" -> comparison > 0;
+            case ">=" -> comparison >= 0; case "<" -> comparison < 0; case "<=" -> comparison <= 0;
+            default -> false;
+        };
+    }
+
+    private void seedData() {
+        sqlStudents.clear(); sqlScores.clear(); mongoStudents.clear();
+        addSeed(1, "Lan", "DBMS", 9);
+        addSeed(1, "Lan", "Java", 8.5);
+        addSeed(2, "Minh", "DBMS", 8);
+    }
+
+    private void addSeed(int id, String name, String subject, double score) {
+        sqlStudents.put(id, name);
+        sqlScores.add(new SqlScore(id, subject, score));
+        LinkedHashMap<String, Object> doc = mongoStudents.computeIfAbsent(id, key -> {
+            LinkedHashMap<String, Object> d = new LinkedHashMap<>();
+            d.put("_id", key); d.put("name", name); d.put("scores", new ArrayList<LinkedHashMap<String, Object>>());
+            return d;
+        });
+        scoresOf(doc).add(scoreDocument(subject, score));
+    }
+
+    private static LinkedHashMap<String, Object> scoreDocument(String subject, double score) {
+        LinkedHashMap<String, Object> d = new LinkedHashMap<>();
+        d.put("subject", subject); d.put("score", score); return d;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ArrayList<LinkedHashMap<String, Object>> scoresOf(Map<String, Object> doc) {
+        return (ArrayList<LinkedHashMap<String, Object>>) doc.get("scores");
+    }
+
+    private void resetDemo() {
+        seedData();
+        idField.setText("3"); nameField.setText("Lan"); subjectField.setText("DBMS"); scoreField.setText("9");
+        queryField.setText("");
+        setCommands("-- Chế độ mô phỏng: chưa chạy câu lệnh thật.\nSELECT s.StudentId, s.Name, c.Subject, c.Score\nFROM dbo.Students s LEFT JOIN dbo.Scores c ON c.StudentId=s.StudentId;",
+                "// Chế độ mô phỏng: chưa chạy lệnh thật.\ndb.students.find({}).pretty();");
+        refreshTables();
+        say("Đã nạp lại dữ liệu mẫu.");
+    }
+
+    private void crud(String operation) {
+        int studentId = Integer.parseInt(idField.getText().trim());
+        String studentName = nameField.getText().trim();
+        String subject = subjectField.getText().trim();
+        double grade = Double.parseDouble(scoreField.getText().trim());
+        if (studentId < 1) throw new IllegalArgumentException("ID phải là số nguyên dương.");
+        if (studentName.isBlank() || subject.isBlank()) throw new IllegalArgumentException("Tên và môn học không được để trống.");
+        if (!Double.isFinite(grade) || grade < 0 || grade > 10) throw new IllegalArgumentException("Điểm phải nằm từ 0 đến 10.");
+
+        if (operation.equals("insert")) {
+            if (sqlStudents.containsKey(studentId) || mongoStudents.containsKey(studentId))
+                throw new IllegalArgumentException("ID " + studentId + " đã tồn tại. Hãy chọn ID khác hoặc dùng UPDATE.");
+            sqlStudents.put(studentId, studentName);
+            sqlScores.add(new SqlScore(studentId, subject, grade));
+            LinkedHashMap<String, Object> d = new LinkedHashMap<>();
+            d.put("_id", studentId); d.put("name", studentName);
+            ArrayList<LinkedHashMap<String, Object>> scores = new ArrayList<>();
+            scores.add(scoreDocument(subject, grade)); d.put("scores", scores);
+            mongoStudents.put(studentId, d);
+            setCommands("-- Mô phỏng INSERT vào hai bảng\nINSERT INTO dbo.Students(StudentId, Name) VALUES (" + studentId + ", N'" + sqlQuote(studentName) + "');\nINSERT INTO dbo.Scores(StudentId, Subject, Score) VALUES (" + studentId + ", N'" + sqlQuote(subject) + "', " + grade + ");",
+                    "// Mô phỏng upsert document và thêm điểm\ndb.students.insertOne({ _id: " + studentId + ", name: " + json(studentName) + ", scores: [{ subject: " + json(subject) + ", score: " + grade + " }] });");
+        } else if (operation.equals("update")) {
+            if (!sqlStudents.containsKey(studentId) || !mongoStudents.containsKey(studentId))
+                throw new IllegalArgumentException("Không tìm thấy sinh viên ID " + studentId + " để UPDATE.");
+            sqlStudents.put(studentId, studentName);
+            for (SqlScore row : sqlScores) if (row.studentId == studentId && row.subject.equalsIgnoreCase(subject)) row.score = grade;
+            LinkedHashMap<String, Object> d = mongoStudents.get(studentId);
+            d.put("name", studentName);
+            for (Map<String, Object> row : scoresOf(d)) if (subject.equalsIgnoreCase(String.valueOf(row.get("subject")))) row.put("score", grade);
+            setCommands("-- Mô phỏng UPDATE theo StudentId và môn học\nUPDATE dbo.Students SET Name=N'" + sqlQuote(studentName) + "' WHERE StudentId=" + studentId + ";\nUPDATE dbo.Scores SET Score=" + grade + " WHERE StudentId=" + studentId + " AND Subject=N'" + sqlQuote(subject) + "';",
+                    "// Mô phỏng updateOne + $set\ndb.students.updateOne({ _id: " + studentId + " }, { $set: { name: " + json(studentName) + ", 'scores.$[s].score': " + grade + " } }, { arrayFilters: [{ 's.subject': " + json(subject) + " }] });");
+        } else {
+            if (!sqlStudents.containsKey(studentId) && !mongoStudents.containsKey(studentId))
+                throw new IllegalArgumentException("Không tìm thấy sinh viên ID " + studentId + " để DELETE.");
+            sqlStudents.remove(studentId);
+            sqlScores.removeIf(row -> row.studentId == studentId);
+            mongoStudents.remove(studentId);
+            setCommands("-- Mô phỏng xóa bảng con trước, bảng cha sau\nDELETE FROM dbo.Scores WHERE StudentId=" + studentId + ";\nDELETE FROM dbo.Students WHERE StudentId=" + studentId + ";",
+                    "// Mô phỏng xóa một document\ndb.students.deleteOne({ _id: " + studentId + " });");
+        }
+        refreshTables();
+        say(operation.toUpperCase(Locale.ROOT) + " đã cập nhật cả mô hình bảng SQL và document MongoDB trong bộ nhớ Java.");
+    }
+
+    private void addNoSqlField() {
+        int studentId = Integer.parseInt(idField.getText().trim());
+        String field = extraField.getText().trim();
+        String value = extraValue.getText();
+        if (!field.matches("[A-Za-z][A-Za-z0-9_]*") || field.equals("_id") || field.equals("scores"))
+            throw new IllegalArgumentException("Tên field phải bắt đầu bằng chữ và không được là _id hoặc scores.");
+        LinkedHashMap<String, Object> d = mongoStudents.get(studentId);
+        if (d == null) throw new IllegalArgumentException("MongoDB mô phỏng không có document ID " + studentId + ".");
+        d.put(field, value);
+        setCommands("-- MongoDB cho document field linh hoạt.\n-- Nếu chuẩn hóa thêm cột cho toàn bảng SQL:\nALTER TABLE dbo.Students ADD [" + field + "] NVARCHAR(100) NULL;\n-- Đây chỉ là lệnh minh họa, không thực thi.",
+                "// Mô phỏng thêm field riêng cho một document\ndb.students.updateOne({ _id: " + studentId + " }, { $set: { " + field + ": " + json(value) + " } });");
+        refreshTables();
+        say("Đã thêm field '" + field + "' vào document mô phỏng ID " + studentId + ". Cấu trúc bảng SQL không đổi.");
+    }
+
+    private void refresh() {
+        String q = queryField.getText().trim();
+        setCommands("-- Mô phỏng SELECT + LEFT JOIN, lọc tên\nSELECT s.StudentId, s.Name, c.Subject, c.Score\nFROM dbo.Students s LEFT JOIN dbo.Scores c ON c.StudentId=s.StudentId\nWHERE s.Name LIKE N'%" + sqlQuote(q) + "%';",
+                "// Mô phỏng truy vấn document theo regex\ndb.students.find({ name: /" + q.replace("/", "\\/") + "/i }).pretty();");
+        refreshTables();
+        say("QUERY mô phỏng: SQL JOIN trả các hàng phù hợp; MongoDB find() trả document phù hợp.");
+    }
+
+    private void refreshTables() {
+        sqlModel.setRowCount(0); mongoModel.setRowCount(0);
+        String q = queryField.getText().trim().toLowerCase(Locale.ROOT);
+        for (Map.Entry<Integer, String> student : sqlStudents.entrySet()) {
+            if (!student.getValue().toLowerCase(Locale.ROOT).contains(q)) continue;
+            boolean hasScore = false;
+            for (SqlScore row : sqlScores) if (row.studentId == student.getKey()) {
+                sqlModel.addRow(new Object[]{student.getKey(), student.getValue(), row.subject, row.score}); hasScore = true;
+            }
+            if (!hasScore) sqlModel.addRow(new Object[]{student.getKey(), student.getValue(), "", ""});
+        }
+        for (Map<String, Object> doc : mongoStudents.values()) {
+            String studentName = String.valueOf(doc.get("name"));
+            if (studentName.toLowerCase(Locale.ROOT).contains(q)) mongoModel.addRow(new Object[]{doc.get("_id"), json(doc)});
+        }
+    }
+
+    private void aggregateScores() {
+        TreeMap<String, double[]> groups = new TreeMap<>();
+        for (SqlScore row : sqlScores) {
+            double[] a = groups.computeIfAbsent(row.subject, ignored -> new double[2]);
+            a[0] += row.score; a[1]++;
+        }
+        sqlModel.setRowCount(0); mongoModel.setRowCount(0);
+        for (Map.Entry<String, double[]> entry : groups.entrySet()) {
+            double average = entry.getValue()[0] / entry.getValue()[1];
+            int count = (int) entry.getValue()[1];
+            sqlModel.addRow(new Object[]{"GROUP", count + " điểm", entry.getKey(), String.format(Locale.US, "%.2f", average)});
+            LinkedHashMap<String, Object> groupDoc = new LinkedHashMap<>();
+            groupDoc.put("_id", entry.getKey()); groupDoc.put("averageScore", Math.round(average * 100.0) / 100.0); groupDoc.put("scoreCount", count);
+            mongoModel.addRow(new Object[]{entry.getKey(), json(groupDoc)});
+        }
+        setCommands("-- Mô phỏng GROUP BY trên bảng Scores\nSELECT Subject, AVG(Score) AS AverageScore, COUNT(*) AS ScoreCount\nFROM dbo.Scores GROUP BY Subject ORDER BY Subject;",
+                "// Mô phỏng aggregation pipeline trên mảng scores\ndb.students.aggregate([\n  { $unwind: '$scores' },\n  { $group: { _id: '$scores.subject', averageScore: { $avg: '$scores.score' }, scoreCount: { $sum: 1 } } },\n  { $sort: { _id: 1 } }\n]);");
+        say("GROUP BY / AGGREGATE mô phỏng: so sánh kết quả tổng hợp theo môn ở hai mô hình.");
+    }
+
+    private void setCommands(String sql, String mongo) { sqlCommand.setText(sql); mongoCommand.setText(mongo); }
+    private void say(String message) { log.append("• " + message + "\n"); log.setCaretPosition(log.getDocument().getLength()); }
+    private static String sqlQuote(String value) { return value.replace("'", "''"); }
+
+    private static String json(Object value) {
+        if (value == null) return "null";
+        if (value instanceof String s) return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+        if (value instanceof Map<?, ?> map) {
+            ArrayList<String> parts = new ArrayList<>();
+            map.forEach((k, v) -> parts.add(json(String.valueOf(k)) + ": " + json(v)));
+            return "{" + String.join(", ", parts) + "}";
+        }
+        if (value instanceof Iterable<?> items) {
+            ArrayList<String> parts = new ArrayList<>();
+            for (Object item : items) parts.add(json(item));
+            return "[" + String.join(", ", parts) + "]";
+        }
+        return String.valueOf(value);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new NoSqlVsSqlDemo().setVisible(true));
+    }
 }
