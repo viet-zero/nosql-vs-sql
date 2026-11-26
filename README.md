@@ -105,7 +105,7 @@ Students                 Scores
 ## ⚠️ Giới hạn
 
 - Đây là mô phỏng phục vụ học tập, không phải kết nối SQL Server/MongoDB thật.
-- Dữ liệu chỉ tồn tại trong RAM và mất khi đóng ứng dụng; nút **NẠP LẠI DỮ LIỆU MẪU** khôi phục bộ dữ liệu ban đầu.
+- Dữ liệu chỉ tồn tại trong RAM và trở về mẫu ban đầu khi đóng rồi mở lại ứng dụng.
 - Kết quả minh họa cấu trúc và cú pháp, không dùng để đo hiệu năng hoặc thay thế database.
 - Bộ dịch SQL sang MongoDB chỉ hiểu một tập con rõ ràng: `SELECT ... FROM Students`, tùy chọn JOIN với `Scores`, và điều kiện `WHERE` hỗ trợ trong giao diện. Truy vấn SQL tổng quát, hàm phức tạp, `OR`, subquery và các cú pháp khác chưa được chuyển đổi.
 - Chương trình không mô phỏng đầy đủ giao dịch, chỉ mục, phân quyền, replication hay sharding.

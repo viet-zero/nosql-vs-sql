@@ -60,14 +60,6 @@ public class NoSqlVsSqlDemo extends JFrame {
         main.setOpaque(false);
         root.add(main, BorderLayout.CENTER);
 
-        JPanel mode = new JPanel(new BorderLayout(10, 0));
-        mode.setBorder(BorderFactory.createTitledBorder("CHẾ ĐỘ MÔ PHỎNG · không kết nối server thật"));
-        JLabel modeText = new JLabel("SQL Server và MongoDB được mô phỏng riêng trong bộ nhớ. Dữ liệu sẽ trở về mẫu khi đóng ứng dụng.");
-        modeText.setForeground(new Color(30, 75, 120));
-        mode.add(modeText, BorderLayout.CENTER);
-        mode.add(button("NẠP LẠI DỮ LIỆU MẪU", this::resetDemo), BorderLayout.EAST);
-        main.add(mode, BorderLayout.NORTH);
-
         JPanel work = new JPanel(new BorderLayout(8, 8));
         work.setOpaque(false);
         main.add(work, BorderLayout.CENTER);
@@ -404,16 +396,6 @@ public class NoSqlVsSqlDemo extends JFrame {
     @SuppressWarnings("unchecked")
     private static ArrayList<LinkedHashMap<String, Object>> scoresOf(Map<String, Object> doc) {
         return (ArrayList<LinkedHashMap<String, Object>>) doc.get("scores");
-    }
-
-    private void resetDemo() {
-        seedData();
-        idField.setText("3"); nameField.setText("Lan"); subjectField.setText("DBMS"); scoreField.setText("9");
-        queryField.setText("");
-        setCommands("-- Chế độ mô phỏng: chưa chạy câu lệnh thật.\nSELECT s.StudentId, s.Name, c.Subject, c.Score\nFROM dbo.Students s LEFT JOIN dbo.Scores c ON c.StudentId=s.StudentId;",
-                "// Chế độ mô phỏng: chưa chạy lệnh thật.\ndb.students.find({}).pretty();");
-        refreshTables();
-        say("Đã nạp lại dữ liệu mẫu.");
     }
 
     private void crud(String operation) {
